@@ -1,8 +1,9 @@
+clear;clc;
 %% Tier 1
 M = 3; % MPR capability
 MM = 11; % collect them all
-U = [150 140 130 120 110 100 90 80 70]; % num of users
-L = [40 60 80 100 120 140 160 180 200]; % UAV altitude
+U = [150 140 130 120 110 100 90 80 70 60]; % num of users
+h_uav = [-20 40 60 80 100 120 140 160 180 200]; % UAV altitude
 p_u = 0.1; % activation probability
 b = 0.1;
 
@@ -13,10 +14,9 @@ n = T_f * R; % num of channel uses
 k = 640;
 RR = 0.6;
 D_f = 250 * 10^3;
-
 %% Tier 1 
 if ~exist('SNR', 'var')
-    [h_uav, SNR, SNR_dBm] = snr_from_excess_PL_novo(L);
+    [h_uav, SNR, SNR_dBm] = snr_from_excess_PL_novo(h_uav);
     SNR = SNR';
 end
 
@@ -24,43 +24,57 @@ T = zeros(size(SNR,1), size(SNR,2));
 eff = zeros(size(SNR,1), size(SNR,2));
 P_e = zeros(size(SNR,2),M);
 
-tic
-if ~exist('Cmr', 'var')
-    Cmr = zeros(length(h_uav), MM+1);
-    for h = 1:length(L)
-        for m = 0 : MM
-             for i = m : U(h)
-                 Cmr(h,m+1) = Cmr(h,m+1) + CalculateCmr_mex( int16(i), int16(m), h_uav(h), b ) * binopdf(i,U,p_u);
-             end
+bool = false;
+if (bool == true)
+    tic
+    if ~exist('Cmr', 'var')
+        Cmr = zeros(length(h_uav), MM+1);
+        for h = 1 : length(h_uav)
+            for m = 0 : MM
+                 for i = 0 : U(h)
+                     Cmr(h,m+1) = Cmr(h,m+1) + CalculateCmr( int16(i), int16(m), h_uav(h), b ) * binopdf(i,U(h),p_u);
+                 end
+            end
+        end
+    end
+    toc
+    
+    
+    %% Tier 2
+    for s_row = 1 : size(SNR,1)
+        P_e = zeros(size(SNR,2),M);
+        for s_column = 1 : size(SNR,2)
+            for m = 1 : M
+    
+                P_e(s_column,m) = frame_error_probability(SNR(s_row,s_column), n, m, k, RR);
+                
+                if(m < M)
+                    T(s_row, s_column) = T(s_row, s_column) + ...
+                                        (Cmr(s_row,m) * (m * (1 - P_e(s_column,m))));
+                else
+                    T(s_row, s_column) = T(s_row, s_column) + ...
+                                        (sum(Cmr(s_row,m:end)) * (m * (1 - P_e(s_column,m))));
+                end
+                if( m < M)
+                    eff(s_row, s_column) = eff(s_row, s_column) + efficiency(n, m, k, Cmr(s_row,m), RR);
+                else
+                    eff(s_row, s_column) = eff(s_row, s_column) + efficiency(n, m, k, sum(Cmr(s_row,m:end)), RR);
+                end
+            end
         end
     end
 end
-toc
 
-
-%% Tier 2
 for s_row = 1 : size(SNR,1)
     P_e = zeros(size(SNR,2),M);
     for s_column = 1 : size(SNR,2)
         for m = 1 : M
-
-            P_e(s_column,m) = frame_error_probability(SNR(s_row,s_column), n, m, k, RR);
-            
-            if(m < M)
-                T(s_row, s_column) = T(s_row, s_column) + ...
-                                    (Cmr(s_row,m) * (m * (1 - P_e(s_column,m))));
-            else
-                T(s_row, s_column) = T(s_row, s_column) + ...
-                                    (sum(Cmr(s_row,m:end)) * (m * (1 - P_e(s_column,m))));
-            end
-            if( m < M)
-                eff(s_row, s_column) = eff(s_row, s_column) + efficiency(n, m, k, Cmr(s_row,m), RR);
-            else
-                eff(s_row, s_column) = eff(s_row, s_column) + efficiency(n, m, k, sum(Cmr(s_row,m:end)), RR);
-            end
+            P_e(s_column,m) = frame_error_probability(SNR(s_row,s_column), n, m, k, RR);  
         end
     end
 end
+
+
 
 %% helper functions
 

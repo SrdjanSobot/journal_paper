@@ -1,7 +1,7 @@
 function [Cmr] = CalculateCmr(r, m, h_uav, b) %Pr [m signals out of r are captured]
     Npts = 2^14;
     L = 40 + h_uav;
-    D = flip(L * 5);
+    D = L * 5;
     eta = 2;
     success = 0;
     %--------------------

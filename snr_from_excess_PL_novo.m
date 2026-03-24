@@ -1,4 +1,4 @@
-function [h_uav, SNR_mW, SNR_dBm] = snr_from_excess_PL_novo(L)
+function [h_uav, SNR_mW, SNR_dBm] = snr_from_excess_PL_novo(h_uav)
 % Model from paper: " Al-Hourani, A. and Gomez, K., 2017. Modeling 
 % cellular-to-UAV path-loss for suburban environments. IEEE Wireless 
 % Communications Letters, 7(1), pp.82-85."
@@ -14,9 +14,7 @@ A = -23.29; % Excell path-loss scaler
 %% Uncomment this part for: changing distance from BS vs fixed UAV altitude at -15 0 30 60 90
  d = 500:500:8000;
  %d = 2000;
- h_uav = [L - 40];
-% h_uav = [0];
-
+ 
  depression_angle = zeros(length(d), length(h_uav));
  for i = 1:length(d)
      for j = 1:length(h_uav)
