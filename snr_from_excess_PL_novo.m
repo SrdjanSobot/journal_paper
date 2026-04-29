@@ -12,7 +12,7 @@ A = -23.29; % Excell path-loss scaler
 
 
 %% Uncomment this part for: changing distance from BS vs fixed UAV altitude at -15 0 30 60 90
- d = 500:500:8000;
+ d = 500:50:8000;
  %d = 2000;
  
  depression_angle = zeros(length(d), length(h_uav));
@@ -21,7 +21,10 @@ A = -23.29; % Excell path-loss scaler
         depression_angle(i,j) = acosd( sqrt( d(i)^2 /( d(i)^2 + h_uav(j)^2 ) ) );        
      end    
  end
- depression_angle(:,1) = depression_angle(:,1) * -1;
+ if(h_uav(1) < 0)
+    disp('Pripaziti da li je h_uav < h_bs u vise nivoa ')
+    depression_angle(:,1) = depression_angle(:,1) * -1;
+ end
 
 %% Uncomment this part for: Fixed distances from BS {500 1000 1500 2000 2500}, changing UAV altitude
 %Extracted from depression_angle table (in previous section)
