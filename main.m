@@ -3,44 +3,33 @@ clear;
 %T = T.T;
 %P_e = load('P_e.mat', 'P_e');
 %P_e = P_e.P_e;
-%Cmr = load('cmr.mat','Cmr');
+Cmr = load('cmr.mat','Cmr');
 %Cmr = Cmr.Cmr;
 
 %% ######### Inputs & System Parameters #########
 % Tier 1
 M = 5; % MPR capability
 MM = 11; % collect them all
-U = [150 140 130 120 110 100 90 80 70 60]; % num of users
-h_uav = [-20 40 60 80 100 120 140 160 180 200]; % UAV altitude
+%U = [150 140 130 120 110 100 90 80 70 60]; % num of users
+%h_uav = [-20 20 60 100 140 180 220 260 300]; % UAV altitude
+h_uav = [0];
 p_u = 0.1; % activation probability
 b = 0.1;
 
 % Tier 2
 T_f = 100 * 10^-3; % Frame duration
-R = 32 * 10^3; % Digital rate in kbps
-n = T_f * R; % num of channel uses
+RR = 32 * 10^3; % Digital rate in kbps
+n = T_f * RR; % num of channel uses
 k = 640;
-RR = [0.6 0.7 0.8 0.9 1];
+%R = [0.6 0.7 0.8 0.9 1];
 D_f = 250 * 10^3;
 
 % Local resources
 B = 25;                 % Battery budget (Joules)
-T_max = 400;            % Latency Deadline (ms)
 
 % Energy Costs (Joules per packet)
-E_cpu = 0.5;            
-E_tx = 0.2;             
-
-% Latency Costs (ms per packet)
-L_loc = 10;             % Time to process 1 packet locally
-L_edge = 5;              % Time to transmit + process 1 packet at edge
-
-% Limits
-max_loc_time = floor(T_max / L_loc);   % Max local packets before deadline
-max_edge_time = floor(T_max / L_edge);  % Max edge packets before deadline
-lambda = 1.5; % Mission duration penality
-
-
+E_cpu = 0.40;            
+E_tx = 0.20;  
 
 %% Tier 1 calculations 
 tic
@@ -61,7 +50,21 @@ toc
 if ~exist('SNR', 'var')
     [h_uav, SNR, SNR_dBm] = snr_from_excess_PL_novo(h_uav);
     SNR = SNR';
+    SNR_dBm = SNR_dBm';
 end
+ %% generate data to plot P_e vs distance. d = 500:50:10000, h_uav = 0;
+  
+      P_e_plot = zeros(M, size(SNR,2));
+      for s_column = 1 : size(SNR, 2);
+          for m = 1 : 5       
+              P_e_plot(m, s_column) = frame_error_probability(SNR(1, s_column), n, m, k, 0);
+          end
+      end
+  
+ %% plot efficiency vs distance
+    eff_local_ = (1:5)' ./ E_cpu;
+    eff_edge_ = ((1:5)' .* (1 - P_e_plot)) / E_tx;
+ %%
 packet_distribution = repmat(struct('edge',0,'local',0), size(SNR,1), size(SNR,2));
 if ~exist('T', 'var')
     T = zeros(size(SNR,1), size(SNR,2));
@@ -71,26 +74,21 @@ if ~exist('T', 'var')
         P_e = zeros(M, size(SNR,2));
         for s_column = 1 : size(SNR,2)
             for m = 1 : M       
-                P_e(m, s_column) = frame_error_probability(SNR(s_row,s_column), n, m, k, 0);
+                P_e(m, s_column) = frame_error_probability(SNR(s_row, s_column), n, m, k, 0);
             end
             current_Pe = P_e(:, s_column);
-            eff_local = 1.0 / E_cpu;
-            eff_edge = (1 - current_Pe) / E_tx;
-            packet_distribution(s_row, s_column).edge = sum(eff_edge > eff_local*2);
-            packet_distribution(s_row, s_column).local = sum(eff_edge < eff_local*2);
-
-                % OVDE SAM STAO
-                % ALGORITAM NA OSNOVU p_e ODLUČI KOLIKO ŠALJE NA EDGE
-                % KOLIKO PROCESIRA LOKALNO.
-                % DODATI DALJI TOK ALGORITMA, I PREBACITI SVE U OVU PETLJU.
-                % KOLIKO JE OTIŠLO LOKALNO, KOLIKO NA EDGE, UPDATE STATUSA
-                % BATERIJA, ZATIM ISPIS REZULTATA I TJT. PRETHODNI KOD
-                % ISPOD VEEEROVATNO NIJE POTREBAN I SAV PROCESSING CE BITI
-                % U OVOJ PETLJI
+            %E_cpu*(5:-1:0) + (1 - current_Pe)'*E_tx < 1
+            eff_local = (1:5)' ./ E_cpu
+            eff_edge = ((1:5)' .* (1 - current_Pe)) / E_tx
+            packet_distribution(s_row, s_column).edge = sum(eff_edge >= eff_local);
+            packet_distribution(s_row, s_column).local = sum(eff_edge <= eff_local);
+            edge_matrix = arrayfun(@(x) x.edge, packet_distribution)
+            
         end
     end
 end
 edge_matrix = arrayfun(@(x) x.edge, packet_distribution);
+%edge_matrix = edge_matrix';
     save('T.mat','T');
     save('eff.mat','eff');
     save('P_e.mat','P_e');
@@ -101,9 +99,6 @@ num_scenarios = size(P_e);
 optimal_loc = zeros(num_scenarios);
 optimal_edge = zeros(num_scenarios);
 
-% Effectiveness
-eff_local = 1.0 / E_cpu;
-eff_edge = (1 - P_e) / E_tx;
 
 %% CASE A: Edge is more efficient (Low Error Rate)
 idx_e = eff_edge >= eff_local;
@@ -174,6 +169,13 @@ function [P_e] = frame_error_probability(SNR, n, m, k, R)
     if R == 0
         R = k/n * m;
     end
+
+    if R ~= 0
+        if k/n * m > R
+            R = k/n * m; 
+        end
+    end
+    
     N_samples = 10^6;
     Nak_m = 3; % Nakagami paramter
     gRF = gamrnd(Nak_m,1/Nak_m,1,N_samples);
